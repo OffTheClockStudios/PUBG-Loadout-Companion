@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PUBG Loadout Builder</title>
+  <style>
+    body { font-family: sans-serif; background:#111; color:#eee; margin:0; }
+    .container { padding:1rem; }
+    h1 { margin:0 0 .5rem; }
+    .sub { font-size:.9rem; color:#aaa; margin-bottom:1rem; }
+    .chips { display:flex; gap:.5rem; flex-wrap:wrap; }
+    .chip { padding:.4rem .8rem; border-radius:1rem; background:#333; cursor:pointer; }
+    .chip.active { background:#4caf50; color:#fff; }
+    .toolbar { display:flex; flex-wrap:wrap; gap:.5rem; align-items:center; margin-bottom:1rem; }
+    .toolbar .spacer { flex:1; }
+    .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:1rem; }
+    .card { background:#222; border-radius:.5rem; padding:.5rem; display:flex; flex-direction:column; align-items:center; }
+    .card h3 { margin:.2rem 0; font-size:1rem; }
+    .card img { width:100%; max-height:150px; object-fit:contain; background:#000; border-radius:.3rem; }
+    .preset-bar { display:flex; align-items:center; gap:.5rem; margin:.3rem 0; }
+    .preset-name { font-weight:bold; cursor:pointer; }
+    .dropdown { width:100%; margin:.2rem 0; }
+    select { width:100%; padding:.2rem; background:#333; color:#eee; border:1px solid #555; border-radius:.3rem; }
+    .btn { background:#444; color:#eee; border:none; padding:.3rem .6rem; border-radius:.3rem; cursor:pointer; }
+    .btn:hover { background:#666; }
+    .search { display:flex; gap:.5rem; }
+    input[type="file"] { display:none; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>PUBG Loadout Builder</h1>
+    <div class="sub">Select a category to view weapons. Each weapon has multiple presets (◀ ▶). Double‑click the preset name to rename it. Changes save automatically in your browser.</div>
+
+    <div class="toolbar">
+      <div class="chips" id="categoryChips"></div>
+      <div class="spacer"></div>
+      <div class="search">
+        <input id="searchInput" placeholder="Search weapons… (e.g., M416)" />
+        <button class="btn" id="btnExport">Export JSON</button>
+        <button class="btn" id="btnImport">Import JSON</button>
+        <input type="file" id="importFile" accept="application/json" />
+      </div>
+    </div>
+
+    <div class="grid" id="grid"></div>
+  </div>
+
+<script>
+const IMAGE_DIR = './images';
+const CATEGORIES = ['AR','DMR','SR','SMG','LMG','SHOTGUN','HANDGUN','ETC'];
+
+const WEAPONS = {
+  AR: ['ACE32','AKM','AUG','Beryl M762','Famas','G36C','Groza','K2','M16A4','M416','Mk47 Mutant','QBZ','Scar'],
+  DMR: ['Dragunov','Mini14','Mk12','Mk14','QBU','SKS','SLR','VSS'],
+  SR: ['AWM','KAR98K','Lynx AMR','M24','Mosin Nagant','Win94'],
+  SMG: ['JS9','Micro Uzi','MP5K','MP9','P90','PP19 Bizon','Tommy Gun','UMP45','Vector'],
+  LMG: ['DP28','M249','MG3'],
+  SHOTGUN: ['DBS','O12','S12K','S686','S1897','Sawed Off'],
+  HANDGUN: ['Deagle','P18C','P92','P1911','R45','R1895','Skorpion'],
+  ETC: ['Crossbow']
+};
+
+const ATTACHMENT_OPTIONS = {
+  Muzzle: ['None','Compensator','Suppressor','Flash Hider','Muzzle Brake'],
+  Foregrip: ['None','Vertical Grip','Angled Grip','Thumb Grip','Half Grip','Laser'],
+  Magazine: ['None','Quickdraw','Extended','Ext Quickdraw'],
+  Sight: ['None','Red Dot','Holo','2x','3x','4x','6x','8x','15x'],
+  Stock: ['None','Tactical Stock','Heavy Stock','Cheek Pad']
+};
+
+function imagePath(cat, weapon){
+  return `${IMAGE_DIR}/${cat}/${weapon}.png`;
+}
+
+function loadState(){
+  try{ return JSON.parse(localStorage.getItem('loadouts')) || {}; }catch{return {};}
+}
+function saveState(state){ localStorage.setItem('loadouts', JSON.stringify(state)); }
+
+let state = loadState();
+let currentCategory = CATEGORIES[0];
+
+function buildCategoryChips(){
+  const chipBar = document.getElementById('categoryChips');
+  chipBar.innerHTML = '';
+  CATEGORIES.forEach(cat => {
+    const chip = document.createElement('div');
+    chip.className = 'chip'+(cat===currentCategory?' active':'');
+    chip.textContent = cat;
+    chip.onclick=()=>{currentCategory=cat; renderGrid(); buildCategoryChips();};
+    chipBar.appendChild(chip);
+  });
+}
+
+function renderGrid(){
+  const grid = document.getElementById('grid');
+  grid.innerHTML = '';
+  let search = document.getElementById('searchInput').value.toLowerCase();
+  WEAPONS[currentCategory].forEach(weapon=>{
+    if(search && !weapon.toLowerCase().includes(search)) return;
+    const card = document.createElement('div');
+    card.className='card';
+
+    const title = document.createElement('h3');
+    title.textContent=weapon;
+    card.appendChild(title);
+
+    const img = document.createElement('img');
+    img.src=imagePath(currentCategory,weapon);
+    img.alt=weapon;
+    img.onerror=function(){
+      img.remove();
+      const m=document.createElement('div');
+      m.textContent='Image not found';
+      m.style.color='red';
+      card.appendChild(m);
+    };
+    card.appendChild(img);
+
+    const presets=state[weapon]||[makeBlankPreset(),makeBlankPreset(),makeBlankPreset()];
+    if(!state[weapon]) state[weapon]=presets;
+    let presetIndex=0;
+
+    const presetBar=document.createElement('div');
+    presetBar.className='preset-bar';
+    const left=document.createElement('button'); left.textContent='◀'; left.className='btn';
+    const right=document.createElement('button'); right.textContent='▶'; right.className='btn';
+    const nameSpan=document.createElement('span'); nameSpan.className='preset-name';
+
+    function updatePreset(){
+      const p=presets[presetIndex];
+      nameSpan.textContent=p.name||`Preset ${presetIndex+1}`;
+      form.innerHTML='';
+      for(const slot in ATTACHMENT_OPTIONS){
+        const div=document.createElement('div');
+        const sel=document.createElement('select');
+        sel.className='dropdown';
+        ATTACHMENT_OPTIONS[slot].forEach(opt=>{
+          const o=document.createElement('option');
+          o.value=o.text=opt; if(p.attachments[slot]===opt) o.selected=true;
+          sel.appendChild(o);
+        });
+        sel.onchange=()=>{p.attachments[slot]=sel.value; saveState(state);};
+        div.textContent=slot+': '; div.appendChild(sel);
+        form.appendChild(div);
+      }
+    }
+
+    left.onclick=()=>{presetIndex=(presetIndex-1+presets.length)%presets.length; updatePreset();};
+    right.onclick=()=>{presetIndex=(presetIndex+1)%presets.length; updatePreset();};
+    nameSpan.ondblclick=()=>{
+      const newName=prompt('Preset name:',presets[presetIndex].name);
+      if(newName!==null){presets[presetIndex].name=newName; saveState(state); updatePreset();}
+    };
+
+    presetBar.appendChild(left);
+    presetBar.appendChild(nameSpan);
+    presetBar.appendChild(right);
+    card.appendChild(presetBar);
+
+    const form=document.createElement('div');
+    card.appendChild(form);
+
+    updatePreset();
+
+    grid.appendChild(card);
+  });
+  saveState(state);
+}
+
+function makeBlankPreset(){ return {name:'',attachments:{Muzzle:'None',Foregrip:'None',Magazine:'None',Sight:'None',Stock:'None'}}; }
+
+document.getElementById('searchInput').oninput=renderGrid;
+document.getElementById('btnExport').onclick=()=>{
+  const blob=new Blob([JSON.stringify(state,null,2)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='loadouts.json'; a.click();
+};
+document.getElementById('btnImport').onclick=()=>{document.getElementById('importFile').click();};
+document.getElementById('importFile').onchange=e=>{
+  const file=e.target.files[0]; if(!file) return;
+  const r=new FileReader();
+  r.onload=()=>{try{state=JSON.parse(r.result); saveState(state); renderGrid();}catch{alert('Invalid JSON');}};
+  r.readAsText(file);
+};
+
+buildCategoryChips();
+renderGrid();
+</script>
+</body>
+</html>
