@@ -7,7 +7,7 @@
   <style>
     body { font-family: sans-serif; background:#111; color:#eee; margin:0; }
     .container { padding:1rem; }
-    h1 { margin:0 0 .5rem; }
+    h1 { margin:0 0 .3rem; }
     .sub { font-size:.9rem; color:#aaa; margin-bottom:1rem; }
     .chips { display:flex; gap:.5rem; flex-wrap:wrap; }
     .chip { padding:.4rem .8rem; border-radius:1rem; background:#333; cursor:pointer; }
@@ -31,8 +31,6 @@
 <body>
   <div class="container">
     <h1>PUBG Loadout Companion</h1>
-    <div class="sub">Select a category to view weapons. Each weapon has multiple presets. Double‑click the preset name to rename it. Changes save automatically in your browser.</div>
-
     <div class="toolbar">
       <div class="chips" id="categoryChips"></div>
       <div class="spacer"></div>
@@ -46,7 +44,8 @@
 
     <div class="grid" id="grid"></div>
 
-    <!-- Attribution footer -->
+    <div class="sub">Select a category to view weapons. Each weapon has multiple presets. Double‑click the preset name to rename it. Changes save automatically in your browser.</div>
+    
     <p class="attribution">
       Weapon images and assets © PUBG Corporation. Sourced from 
       <a href="https://pubg.com" target="_blank">pubg.com</a>.
@@ -195,6 +194,7 @@ renderGrid();
 </script>
 </body>
 </html>
+
 
 
 
