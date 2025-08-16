@@ -25,6 +25,7 @@
     .btn { background:#444; color:#eee; border:none; padding:.3rem .6rem; border-radius:.3rem; cursor:pointer; }
     .btn:hover { background:#666; }
     .search { display:flex; gap:.5rem; }
+    .spacer { height: 10px; }
     input[type="file"] { display:none; }
   </style>
 </head>
@@ -43,9 +44,9 @@
     </div>
 
     <div class="grid" id="grid"></div>
-
-    <div class="sub">Select a category to view weapons. Each weapon has multiple presets. Double‑click the preset name to rename it. Changes save automatically in your browser.</div>
-    
+    <div class="spacer"></div>
+    <div class="sub">Each weapon has multiple presets. Double‑click the preset name to rename it. Changes save automatically in your browser.</div>
+    <div class="spacer"></div>
     <p class="attribution">
       Weapon images and assets © PUBG Corporation. Sourced from 
       <a href="https://pubg.com" target="_blank">pubg.com</a>.
@@ -194,6 +195,7 @@ renderGrid();
 </script>
 </body>
 </html>
+
 
 
 
