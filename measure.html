@@ -1,101 +1,176 @@
-<!DOCTYPE html>
-<html lang="en">
+<!DOCTYPE html><html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>PUBG Mortar Meter Helper</title>
-  <p><a href="index.html" class="btn">Open Weapon Loadout Page</a></p>
+  <title>PUBG Mortar Meter Helper — Live Table</title>
   <style>
-    :root { --bg:#0f172a; --panel:#111827; --muted:#94a3b8; --text:#e5e7eb; --accent:#3b82f6; }
+    :root { --bg:#0f172a; --panel:#111827; --muted:#94a3b8; --text:#e5e7eb; --accent:#3b82f6; --line:#1f2937; }
     * { box-sizing: border-box; }
     body {font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, 'Noto Sans', sans-serif; background: var(--bg); color: var(--text); margin: 0;}
-    .wrap { max-width: 720px; margin: 24px auto; padding: 24px; }
+    .wrap { max-width: 1000px; margin: 24px auto; padding: 24px; }
     h1 {font-size: 1.8rem; margin: 0 0 8px; text-align:center}
     p.lead { color: var(--muted); margin: 0 0 18px; text-align:center }
-    .card { background: var(--panel); border: 1px solid #1f2937; border-radius: 12px; padding: 16px; box-shadow: 0 8px 24px rgba(0,0,0,.25); }
+    .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; box-shadow: 0 8px 24px rgba(0,0,0,.25); }
     .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
     label { display:block; font-weight:600; margin: 6px 0 6px; }
     input[type="number"] { width: 100%; padding: 10px 12px; border-radius: 8px; border: 1px solid #243244; background: #0b1220; color: var(--text); }
-    .row { display:flex; gap:10px; align-items:center; flex-wrap: wrap; }
-    .btn { appearance:none; border:1px solid #1f2937; background:#0b1220; color:var(--text); padding:8px 12px; border-radius:8px; cursor:pointer; }
-    .btn.primary { background: var(--accent); border-color: transparent; }
-    .result { font-size: 1.6rem; font-weight: 700; letter-spacing:.4px; }
     .muted { color: var(--muted); font-size:.92rem; }
+    table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+    th, td { border-bottom: 1px solid var(--line); padding: 8px 10px; text-align: right; }
+    th:first-child, td:first-child { text-align: left; }
+    thead th { position: sticky; top: 0; background: #0d1220; z-index: 1; }
+    .scroll { max-height: 60vh; overflow: auto; border: 1px solid var(--line); border-radius: 10px; }
+    .result { font-size: 1.6rem; font-weight: 700; letter-spacing:.4px; }
+    .row-hilite { background: rgba(59,130,246,.10); }
+    .pill { display:inline-block; padding:.15rem .5rem; border:1px solid var(--line); border-radius:999px; font-size:.8rem; color:var(--muted); }
+    .small { font-size: .85rem; }
   </style>
 </head>
 <body>
   <div class="wrap">
     <h1>PUBG Mortar Meter Helper</h1>
-    <p class="lead">Convert ruler cm → in-game meters to get accurate planar distances.</p>
-
-    <div class="card">
-      <div class="grid">
-        <div>
-          <label for="refCm">How many cm = <strong>100 m</strong> on your map?</label>
-          <input id="refCm" type="number" min="0.01" step="0.01" value="4.5" />
-          <div class="muted">Example: one 100 m grid cell might be 4.5 cm on your printout.</div>
-        </div>
-        <div>
-          <label for="targetCm">Measured map length to target (cm)</label>
-          <input id="targetCm" type="number" min="0" step="0.01" value="17.5" />
-        </div>
-      </div>
-
-      <div class="row" style="margin-top:10px">
-        <button class="btn primary" id="calcBtn">Compute</button>
-        <button class="btn" id="resetBtn">Reset</button>
-      </div>
+    <p class="lead">Type one ruler length; get distances for many map scales at once. No button needed.</p><div class="card" aria-label="inputs">
+  <div class="grid">
+    <div>
+      <label for="targetCm">Measured map length (cm)</label>
+      <input id="targetCm" type="number" min="0" step="0.01" value="17.5" />
+      <div class="muted">Type the one thing you measure on the paper map.</div>
     </div>
-
-    <div class="card" style="margin-top:16px">
-      <div style="display:flex;justify-content:space-between;align-items:flex-end">
-        <div>
-          <div class="muted">Planar (map) distance</div>
-          <div class="result" id="resultMeters">— m</div>
-        </div>
-        <div style="text-align:right">
-          <div class="muted">Formula</div>
-          <div id="formulaText" class="muted">D = 100 × (L_target / L_ref)</div>
-        </div>
-      </div>
-      <div id="explain" class="muted" style="margin-top:8px"></div>
+    <div>
+      <label for="rowStep">Row step for measured cm</label>
+      <input id="rowStep" type="number" min="0.01" step="0.01" value="0.5" />
+      <div class="muted">e.g., 0.2, 0.5, 1.0…</div>
     </div>
-
-    <div class="card" style="margin-top:16px">
-      <details>
-        <summary><strong>Math notes</strong></summary>
-        <p class="muted">This tool simply converts ruler distance to in-game meters. Mortar trajectory uses ballistic equations with v₀ inferred from max flat range (700 m). For elevation corrections, use field testing to chart your own falloff curve.</p>
-      </details>
+    <div>
+      <label for="maxLen">Max ruler length to list (cm)</label>
+      <input id="maxLen" type="number" min="0.5" step="0.1" value="30.5" />
+      <div class="muted">Your ruler tops out at 30.5 cm.</div>
     </div>
   </div>
 
-  <script>
+  <div class="grid" style="margin-top:12px">
+    <div>
+      <label for="refMin">Reference range — min X (100 m = X cm)</label>
+      <input id="refMin" type="number" min="0.1" step="0.1" value="3.0" />
+    </div>
+    <div>
+      <label for="refMax">Reference range — max X (100 m = X cm)</label>
+      <input id="refMax" type="number" min="0.2" step="0.1" value="6.0" />
+    </div>
+    <div>
+      <label for="refStep">Reference step (cm)</label>
+      <input id="refStep" type="number" min="0.01" step="0.01" value="0.5" />
+      <div class="muted">Pick .2, .5, 1, etc. Columns auto-update.</div>
+    </div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:16px" aria-label="live result">
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap">
+    <div>
+      <div class="muted">Quick read @ your input length</div>
+      <div class="result" id="quick"></div>
+    </div>
+    <div style="text-align:right">
+      <div class="muted">Formula</div>
+      <div class="muted small">D = 100 × (L / X), where X is the cm that equal 100 m on your printout.</div>
+    </div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:16px" aria-label="table">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+    <strong>Lookup table</strong>
+    <span class="pill" id="meta"></span>
+  </div>
+  <div class="scroll" style="margin-top:8px">
+    <table id="tbl" role="grid" aria-describedby="meta"></table>
+  </div>
+  <div class="muted small" style="margin-top:8px">Values update as you type. Row highlighted ≈ your measured length.</div>
+</div>
+
+<div class="card" style="margin-top:16px">
+  <details>
+    <summary><strong>Math notes</strong></summary>
+    <p class="muted">We convert ruler distance L (cm) to map distance D (m) using the map scale parameter X (cm per 100 m): <code>D = 100×(L/X)</code>. The table lists many X values (columns) and many L values (rows) so you can scan quickly without changing inputs.</p>
+  </details>
+</div>
+
+  </div>  <script>
     const $ = (id) => document.getElementById(id);
 
-    function computePlanarDistanceMeters(refCm, targetCm) {
-      if (!(refCm > 0) || !(targetCm >= 0)) return NaN;
-      return 100 * (targetCm / refCm);
+    function range(start, stop, step) {
+      const out = []; if (!(step > 0)) return out;
+      for (let v = start; v <= stop + 1e-9; v = +(v + step).toFixed(10)) out.push(+v.toFixed(3));
+      return out;
     }
 
     function fmt(n, digits = 1) {
-      return isFinite(n) ? n.toLocaleString(undefined, { maximumFractionDigits: digits, minimumFractionDigits: digits }) : '—';
+      return Number.isFinite(n) ? n.toLocaleString(undefined, { maximumFractionDigits: digits, minimumFractionDigits: digits }) : '—';
     }
 
-    function calculate() {
-      const refCm = parseFloat($("refCm").value);
-      const targetCm = parseFloat($("targetCm").value);
-      const D = computePlanarDistanceMeters(refCm, targetCm);
-
-      $("resultMeters").textContent = `${fmt(D, 1)} m`;
-      $("formulaText").textContent = `D = 100 × (${isFinite(targetCm)?targetCm:'—'} / ${isFinite(refCm)?refCm:'—'}) = ${fmt(D,1)} m`;
-      $("explain").textContent = isFinite(D)
-        ? `Scale: 1 cm ≈ ${fmt(100 / refCm, 2)} m; measured ${fmt(targetCm,2)} cm.`
-        : 'Please enter valid positive numbers.';
+    function sanitizeInputs() {
+      const target = Math.max(0, parseFloat($("targetCm").value) || 0);
+      let rowStep = parseFloat($("rowStep").value) || 0.5; if (rowStep <= 0) rowStep = 0.5;
+      let maxLen = parseFloat($("maxLen").value) || 30.5; if (maxLen <= 0) maxLen = 30.5;
+      let refMin = parseFloat($("refMin").value) || 3.0;
+      let refMax = parseFloat($("refMax").value) || 6.0;
+      let refStep = parseFloat($("refStep").value) || 0.5; if (refStep <= 0) refStep = 0.5;
+      if (refMin > refMax) [refMin, refMax] = [refMax, refMin];
+      return { target, rowStep, maxLen, refMin, refMax, refStep };
     }
 
-    $("calcBtn").addEventListener('click', calculate);
-    $("resetBtn").addEventListener('click', () => { $("refCm").value = 4.5; $("targetCm").value = 17.5; calculate(); });
-    calculate();
-  </script>
-</body>
+    function buildTable() {
+      const { target, rowStep, maxLen, refMin, refMax, refStep } = sanitizeInputs();
+      const columns = range(refMin, refMax, refStep);
+      const rows = range(0, maxLen, rowStep);
+
+      const tbl = $("tbl");
+      tbl.innerHTML = '';
+
+      // Header
+      const thead = document.createElement('thead');
+      const hr = document.createElement('tr');
+      const th0 = document.createElement('th'); th0.textContent = 'Measured (cm)'; hr.appendChild(th0);
+      for (const x of columns) {
+        const th = document.createElement('th');
+        th.innerHTML = `100 m = <strong>${fmt(x, 2)}</strong> cm`;
+        th.title = `Scale column — 1 cm ≈ ${(100/x).toFixed(2)} m`;
+        hr.appendChild(th);
+      }
+      thead.appendChild(hr);
+
+      // Body
+      const tbody = document.createElement('tbody');
+      for (const L of rows) {
+        const tr = document.createElement('tr');
+        if (Math.abs(L - target) <= rowStep/2) tr.classList.add('row-hilite');
+        const td0 = document.createElement('td'); td0.textContent = fmt(L, 2); tr.appendChild(td0);
+        for (const X of columns) {
+          const td = document.createElement('td');
+          const D = 100 * (L / X);
+          td.textContent = fmt(D, 1);
+          tr.appendChild(td);
+        }
+        tbody.appendChild(tr);
+      }
+
+      tbl.appendChild(thead);
+      tbl.appendChild(tbody);
+
+      // Meta & quick panel
+      $("meta").textContent = `${rows.length} rows × ${columns.length} cols`;
+      const quick = columns.map(X => `${fmt(100 * (target / X), 0)} m @ X=${fmt(X,2)}cm`).join('  ·  ');
+      $("quick").textContent = target > 0 ? quick : '—';
+    }
+
+    // Wire up inputs for instant updates
+    ["targetCm","rowStep","maxLen","refMin","refMax","refStep"].forEach(id => {
+      $(id).addEventListener('input', buildTable);
+      $(id).addEventListener('change', buildTable);
+    });
+
+    // First render
+    buildTable();
+  </script></body>
 </html>
