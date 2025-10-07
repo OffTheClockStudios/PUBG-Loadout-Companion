@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PUBG Map Ruler Distance Calculator</title>
+  <p><a href="index.html" class="btn">Open Weapon Loadout Page</a></p>
+  <style>
+    body {font-family: system-ui, sans-serif; background: #0f172a; color: #e5e7eb; margin: 0; padding: 2rem;}
+    h1 {font-size: 1.8rem; margin-bottom: 1rem; text-align: center;}
+    .card {background: #111827; padding: 1.5rem; border-radius: 1rem; max-width: 500px; margin: auto;}
+    label {display: block; margin-top: 1rem; font-weight: 600;}
+    input {width: 100%; padding: 0.6rem; border-radius: 0.5rem; border: 1px solid #1f2937; background: #0b1220; color: #e5e7eb;}
+    button {margin-top: 1.5rem; padding: 0.8rem 1.2rem; border: none; border-radius: 0.5rem; background: #3b82f6; color: white; font-weight: bold; cursor: pointer; width: 100%;}
+    button:hover {background: #2563eb;}
+    .result {margin-top: 1.5rem; font-size: 1.5rem; font-weight: bold; text-align: center;}
+  </style>
+</head>
+<body>
+  <h1>PUBG Map Ruler Distance Calculator</h1>
+  <div class="card">
+    <label for="refCm">How many cm = 100m?</label>
+    <input id="refCm" type="number" step="0.01" value="4.5" />
+
+    <label for="targetCm">Target distance (cm on map)</label>
+    <input id="targetCm" type="number" step="0.01" value="17.5" />
+
+    <button onclick="calculateDistance()">Calculate Distance</button>
+
+    <div class="result" id="result">—</div>
+  </div>
+
+  <script>
+    function calculateDistance() {
+      const refCm = parseFloat(document.getElementById('refCm').value);
+      const targetCm = parseFloat(document.getElementById('targetCm').value);
+
+      if (!refCm || !targetCm || refCm <= 0) {
+        document.getElementById('result').textContent = 'Please enter valid numbers.';
+        return;
+      }
+
+      const distance = 100 * (targetCm / refCm);
+      document.getElementById('result').textContent = `${distance.toFixed(1)} meters`;
+    }
+  </script>
+</body>
+</html>
