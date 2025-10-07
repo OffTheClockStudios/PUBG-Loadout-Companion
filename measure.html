@@ -21,6 +21,11 @@
     .btn.primary { background: var(--accent); border-color: transparent; }
     .result { font-size: 1.6rem; font-weight: 700; letter-spacing:.4px; }
     .muted { color: var(--muted); font-size:.92rem; }
+    .badge { display:inline-block; padding:2px 8px; border-radius:999px; border:1px solid #243244; font-size:.8rem; color:var(--muted); }
+    .ok { color:#22c55e; }
+    .warn { color:#f59e0b; }
+    .err { color:#f87171; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
   </style>
 </head>
 <body>
@@ -28,6 +33,7 @@
     <h1>PUBG Mortar Meter Helper</h1>
     <p class="lead">Convert ruler cm → in-game meters to get accurate planar distances.</p>
 
+    <!-- Planar distance card (unchanged) -->
     <div class="card">
       <div class="grid">
         <div>
@@ -61,16 +67,55 @@
       <div id="explain" class="muted" style="margin-top:8px"></div>
     </div>
 
+    <!-- NEW: Trajectory helper -->
+    <div class="card" style="margin-top:16px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <strong>Trajectory helper (beta)</strong>
+        <span class="badge">Dial range: 121–700 m</span>
+      </div>
+
+      <div class="grid" style="margin-top:8px">
+        <div>
+          <label for="muzzleVel">Mortar speed v₀ (m/s)</label>
+          <input id="muzzleVel" type="number" min="1" step="0.1" value="40" />
+          <div class="muted">Defaults to 40 m/s.</div>
+        </div>
+        <div>
+          <label for="gunElev">Artillery elevation (m)</label>
+          <input id="gunElev" type="number" step="0.1" value="0" />
+        </div>
+        <div>
+          <label for="tgtElev">Target elevation (m)</label>
+          <input id="tgtElev" type="number" step="0.1" value="0" />
+          <div class="muted">Tip: treat artillery as 0 and put ± here if you prefer a single field.</div>
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:10px">
+        <button class="btn primary" id="trajBtn">Compute trajectory</button>
+        <span class="muted">Uses planar distance above + v₀ + elevation difference.</span>
+      </div>
+
+      <div id="trajOutput" style="margin-top:12px"></div>
+    </div>
+
     <div class="card" style="margin-top:16px">
       <details>
         <summary><strong>Math notes</strong></summary>
-        <p class="muted">This tool simply converts ruler distance to in-game meters. Mortar trajectory uses ballistic equations with v₀ inferred from max flat range (700 m). For elevation corrections, use field testing to chart your own falloff curve.</p>
+        <p class="muted">
+          We solve for launch angle θ that reaches horizontal range R with height difference Δh = (target − artillery):<br>
+          Time of flight uses the positive root of <span class="mono">v₀·sinθ·t − ½·g·t² = Δh</span> and horizontal distance
+          <span class="mono">x = v₀·cosθ·t</span> is matched to R. When two angles exist, both low and high arcs are shown.<br>
+          Equivalent flat-dial range is <span class="mono">R_flat(θ) = v₀²·sin(2θ)/g</span>.
+        </p>
       </details>
     </div>
   </div>
 
   <script>
     const $ = (id) => document.getElementById(id);
+    const g = 9.81; // m/s^2
+    const DIAL_MIN = 121, DIAL_MAX = 700;
 
     function computePlanarDistanceMeters(refCm, targetCm) {
       if (!(refCm > 0) || !(targetCm >= 0)) return NaN;
@@ -93,8 +138,151 @@
         : 'Please enter valid positive numbers.';
     }
 
-    $("calcBtn").addEventListener('click', calculate);
-    $("resetBtn").addEventListener('click', () => { $("refCm").value = 4.5; $("targetCm").value = 17.5; calculate(); });
+    // ---------- Trajectory helper ----------
+    function timeOfFlight(v0, theta, dh) {
+      // solve v0*sinθ*t - 0.5*g*t^2 = dh  => 0.5*g*t^2 - v0*sinθ*t + dh = 0
+      const a = 0.5 * g;
+      const b = -v0 * Math.sin(theta);
+      const c = dh;
+      const disc = b*b - 4*a*c;
+      if (disc < 0) return NaN;
+      // t = [v0*sinθ + sqrt((v0*sinθ)^2 + 2 g dh)]/g  (positive-root form)
+      const t = (v0*Math.sin(theta) + Math.sqrt((v0*Math.sin(theta))**2 + 2*g*dh)) / g;
+      return t > 0 ? t : NaN;
+    }
+
+    function horizontalRange(v0, theta, dh) {
+      const t = timeOfFlight(v0, theta, dh);
+      if (!isFinite(t)) return NaN;
+      return v0 * Math.cos(theta) * t;
+    }
+
+    function f_theta(v0, R, dh, theta) {
+      return horizontalRange(v0, theta, dh) - R;
+    }
+
+    function bisectRoot(v0, R, dh, a, b, maxIter=60, tol=1e-7) {
+      let fa = f_theta(v0, R, dh, a);
+      let fb = f_theta(v0, R, dh, b);
+      if (!isFinite(fa) || !isFinite(fb) || fa*fb > 0) return null;
+      let lo=a, hi=b;
+      for (let i=0;i<maxIter;i++){
+        const mid = 0.5*(lo+hi);
+        const fm = f_theta(v0, R, dh, mid);
+        if (!isFinite(fm)) { // shrink interval a bit if we hit invalids
+          lo = 0.5*(lo+mid);
+          hi = 0.5*(hi+mid);
+          continue;
+        }
+        if (Math.abs(fm) < tol) return mid;
+        if (fa*fm <= 0) { hi = mid; fb = fm; }
+        else { lo = mid; fa = fm; }
+      }
+      return 0.5*(lo+hi);
+    }
+
+    function findAngleSolutions(v0, R, dh) {
+      // scan 0 < θ < π/2 for sign changes to find up to two roots
+      const thMin = 0.001, thMax = Math.PI/2 - 0.001;
+      const steps = 800; // fine enough
+      const roots = [];
+      let prev = thMin;
+      let fprev = f_theta(v0, R, dh, prev);
+      for (let i=1;i<=steps;i++){
+        const th = thMin + (thMax - thMin)*i/steps;
+        const fcur = f_theta(v0, R, dh, th);
+        if (isFinite(fprev) && isFinite(fcur) && fprev * fcur < 0) {
+          const root = bisectRoot(v0, R, dh, prev, th);
+          if (root != null) {
+            // keep unique (avoid near-duplicates)
+            if (!roots.some(r => Math.abs(r - root) < 1e-3)) roots.push(root);
+          }
+        }
+        prev = th; fprev = fcur;
+      }
+      // sort: low-angle first
+      roots.sort((a,b)=>a-b);
+      return roots;
+    }
+
+    function equivalentFlatRange(v0, theta) {
+      return (v0*v0 * Math.sin(2*theta)) / g;
+    }
+
+    function peakHeight(v0, theta) {
+      return (v0*v0 * Math.sin(theta)*Math.sin(theta)) / (2*g);
+    }
+
+    function withinDial(r) {
+      return r >= DIAL_MIN && r <= DIAL_MAX;
+    }
+
+    function computeTrajectory() {
+      // inputs
+      const refCm = parseFloat($("refCm").value);
+      const targetCm = parseFloat($("targetCm").value);
+      const R = computePlanarDistanceMeters(refCm, targetCm);
+      const v0 = parseFloat($("muzzleVel").value);
+      const gunZ = parseFloat($("gunElev").value);
+      const tgtZ = parseFloat($("tgtElev").value);
+      const dh = (isFinite(tgtZ) ? tgtZ : 0) - (isFinite(gunZ) ? gunZ : 0);
+
+      const out = $("trajOutput");
+      if (!(isFinite(R) && R > 0)) {
+        out.innerHTML = `<div class="err">Enter a valid planar distance first.</div>`;
+        return;
+      }
+      if (!(isFinite(v0) && v0 > 0)) {
+        out.innerHTML = `<div class="err">Enter a valid mortar speed v₀.</div>`;
+        return;
+      }
+
+      // solve angles
+      const roots = findAngleSolutions(v0, R, dh);
+
+      if (!roots.length) {
+        out.innerHTML = `
+          <div class="warn">No physical firing solution for R=${fmt(R,1)} m, Δh=${fmt(dh,1)} m at v₀=${fmt(v0,1)} m/s.</div>
+          <div class="muted">Try a different speed, reduce |Δh|, or move closer/farther.</div>`;
+        return;
+      }
+
+      // build rows
+      let rows = roots.map((th, idx) => {
+        const t = timeOfFlight(v0, th, dh);
+        const hpk = peakHeight(v0, th);
+        const dial = equivalentFlatRange(v0, th);
+        const tag = idx === 0 ? "Low arc" : "High arc";
+        const dialClass = withinDial(dial) ? "ok" : "warn";
+        return `
+          <div style="border-top:1px solid #243244; padding-top:10px; margin-top:10px">
+            <div><strong>${tag}</strong> &middot; θ = <span class="mono">${fmt(th*180/Math.PI,1)}°</span></div>
+            <div class="muted">Flight time: <span class="mono">${fmt(t,2)} s</span> &middot; Peak height (above artillery): <span class="mono">${fmt(hpk,1)} m</span></div>
+            <div>Equivalent flat-dial range: <span class="mono ${dialClass}">${fmt(dial,0)} m</span>
+              ${withinDial(dial) ? '<span class="muted"> (within 121–700 m)</span>' : '<span class="muted"> (outside dial range)</span>'}
+            </div>
+          </div>`;
+      }).join("");
+
+      const header = `
+        <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap">
+          <div>Using planar distance <strong>${fmt(R,1)} m</strong> · v₀ <strong>${fmt(v0,1)} m/s</strong></div>
+          <div>Elevation Δh (target − artillery): <strong class="mono">${fmt(dh,1)} m</strong></div>
+        </div>`;
+
+      out.innerHTML = header + rows;
+    }
+
+    // wire up
+    $("calcBtn").addEventListener('click', () => { calculate(); });
+    $("resetBtn").addEventListener('click', () => {
+      $("refCm").value = 4.5;
+      $("targetCm").value = 17.5;
+      calculate();
+    });
+    $("trajBtn").addEventListener('click', computeTrajectory);
+
+    // initial compute
     calculate();
   </script>
 </body>
